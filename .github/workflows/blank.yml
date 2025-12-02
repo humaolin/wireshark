@@ -1,0 +1,59 @@
+name: build-wireshark-arm64-buster
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-arm64-in-qemu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # enable qemu for emulation
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # set up buildx (multi-platform)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # prepare an output dir for artifacts
+      - name: Prepare output dir
+        run: |
+          mkdir -p out
+          chmod -R a+rw out
+
+      # Run a Debian Buster (arm64) container and execute the build script inside.
+      # We mount the repository into the container and the out/ dir for artifacts.
+      - name: Build inside debian:buster (arm64) via QEMU
+        run: |
+          docker run --rm --platform=linux/arm64 \
+            -v "${{ github.workspace }}":/work -w /work \
+            -e DEBIAN_FRONTEND=noninteractive \
+            debian:buster:stable-slim \
+            bash -lc "apt-get update && apt-get install -y git ca-certificates curl apt-transport-https \
+              && bash ci/build-on-buster-arm64.sh"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wireshark-arm64-buster
+          path: out/**
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "Wireshark ARM64 (glibc 2.28)"
+          draft: false
+          prerelease: false
+          files: |
+            out/*.tar.gz
+            out/*.deb
+
+ 
